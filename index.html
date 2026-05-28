@@ -204,7 +204,7 @@ input:focus,select:focus{border-color:#1A2E5A;box-shadow:0 0 0 3px #DBEAFE}
 /* ── RESPONSIVE ── */
 @media(min-width:600px){
   .stats{grid-template-columns:repeat(4,1fr)}
-  .pacts{grid-template-columns:repeat(4,1fr)}
+  .pacts{grid-template-columns:repeat(5,1fr)}
   .overlay{align-items:center;padding:20px}
   .mbox{border-radius:16px;max-height:88vh}
   .mhandle{display:none}
@@ -412,6 +412,31 @@ input:focus,select:focus{border-color:#1A2E5A;box-shadow:0 0 0 3px #DBEAFE}
   <div class="mfoot"><button class="btn full pri" onclick="addParty()">✓ Add Party</button></div>
 </div></div>
 
+<!-- Edit Party -->
+<div class="overlay" id="mo-edit-party">
+<div class="mbox"><div class="mhandle"></div>
+  <div class="mhead">
+    <div><h3>✏️ Edit Party</h3><div style="font-size:12px;color:#888" id="ep-subtitle"></div></div>
+    <button class="xbtn" onclick="closeModal('edit-party')">✕</button>
+  </div>
+  <div class="mbody">
+    <div class="fg"><label>Party Name *</label><input id="ep-name" placeholder="e.g. Raju Garments" autocomplete="off"></div>
+    <div class="fr">
+      <div><label>Phone</label><input id="ep-phone" type="tel" placeholder="9876543210"></div>
+      <div><label>City</label><input id="ep-city" placeholder="Delhi"></div>
+    </div>
+    <div class="fg">
+      <label>Previous Outstanding Balance (Rs.)</label>
+      <input id="ep-ob" type="number" placeholder="0" inputmode="numeric">
+      <div style="font-size:11px;color:#888;margin-top:4px;line-height:1.5">Amount this party owed before tracking started in this app.</div>
+    </div>
+  </div>
+  <div class="mfoot" style="display:flex;gap:8px">
+    <button class="btn" style="flex:1;justify-content:center" onclick="closeModal('edit-party')">Cancel</button>
+    <button class="btn pri" style="flex:1;justify-content:center" onclick="saveEditParty()">✓ Save Changes</button>
+  </div>
+</div></div>
+
 <!-- New Challan -->
 <div class="overlay" id="mo-challan">
 <div class="mbox"><div class="mhandle"></div>
@@ -587,18 +612,20 @@ function showApp(user) {
   document.getElementById('page-login').style.display   = 'none';
   document.getElementById('page-app').style.display     = 'block';
   document.getElementById('fab').style.display          = 'flex';
-  document.getElementById('greet').textContent   = '👋 ' + (user.displayName||'').split(' ')[0];
-  document.getElementById('hdate').textContent   = 'Today: ' + fmtD(today());
-  document.getElementById('um-name').textContent  = user.displayName || '';
-  document.getElementById('um-email').textContent = user.email || '';
-  const av = document.getElementById('avbtn');
-  if (user.photoURL) av.innerHTML = '<img src="'+user.photoURL+'" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
-  else av.textContent = (user.displayName||'U')[0].toUpperCase();
+  try {
+    document.getElementById('greet').textContent   = '👋 ' + (user.displayName||'').split(' ')[0];
+    document.getElementById('hdate').textContent   = 'Today: ' + fmtD(today());
+    document.getElementById('um-name').textContent  = user.displayName || '';
+    document.getElementById('um-email').textContent = user.email || '';
+    const av = document.getElementById('avbtn');
+    if (user.photoURL) av.innerHTML = '<img src="' + user.photoURL + '" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+    else av.textContent = (user.displayName||'U')[0].toUpperCase();
+  } catch(e) {}
   subscribeData();
 }
 
 function showLogin() {
-  if (appIsReady) return; // never show login once app has loaded
+  appIsReady = false;  // always reset so login screen can show
   uid = null;
   if (unsubDB) { unsubDB(); unsubDB = null; }
   document.getElementById('page-loading').style.display = 'none';
@@ -606,41 +633,65 @@ function showLogin() {
   document.getElementById('fab').style.display          = 'none';
   document.getElementById('page-login').style.display   = 'flex';
   document.getElementById('login-msg').textContent      = '';
+  // Reset button state
+  const btn = document.querySelector('.google-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Continue with Google';
+  }
 }
 
-// Check for redirect result first (in case user just came back from Google)
-auth.getRedirectResult()
-  .then(result => { if (result && result.user) showApp(result.user); })
-  .catch(() => {});
-
-// Auth state listener
+// onAuthStateChanged as primary handler
 auth.onAuthStateChanged(user => {
-  if (user) {
-    showApp(user);
-  } else {
-    if (!appIsReady) showLogin();
-  }
+  if (user) { showApp(user); }
+  else if (!appIsReady) { showLogin(); }
 });
 
 function doLogin() {
   const btn = document.querySelector('.google-btn');
   const msg = document.getElementById('login-msg');
-  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Redirecting to Google...'; }
-  msg.style.background = '#EFF6FF';
-  msg.style.color = '#1E40AF';
-  msg.style.padding = '8px';
-  msg.style.borderRadius = '8px';
-  msg.textContent = 'Taking you to Google sign-in...';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Opening Google...'; }
+  if (msg) { msg.textContent = ''; }
+
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithRedirect(provider).catch(e => {
-    if (btn) { btn.disabled = false; btn.innerHTML = 'Continue with Google'; }
-    msg.style.background = '#FEF2F2';
-    msg.style.color = '#B91C1C';
-    msg.textContent = 'Error: ' + e.message;
-  });
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  auth.signInWithPopup(provider)
+    .then(result => {
+      // Call showApp directly — don't wait for onAuthStateChanged
+      if (result && result.user) showApp(result.user);
+    })
+    .catch(popupErr => {
+      if (popupErr.code === 'auth/popup-blocked' ||
+          popupErr.code === 'auth/popup-closed-by-user') {
+        // Popup blocked — use redirect as fallback
+        if (msg) { msg.textContent = 'Opening full page sign-in...'; }
+        auth.signInWithRedirect(provider).catch(e => {
+          if (btn) { btn.disabled = false; btn.innerHTML = 'Continue with Google'; }
+          if (msg) msg.textContent = 'Error: ' + e.message;
+        });
+      } else {
+        if (btn) { btn.disabled = false; btn.innerHTML = 'Continue with Google'; }
+        if (msg) {
+          msg.textContent = 'Error: ' + popupErr.code;
+          msg.style.background='#FEF2F2'; msg.style.color='#B91C1C';
+          msg.style.padding='8px'; msg.style.borderRadius='8px';
+        }
+      }
+    });
 }
 
-function doLogout() { closeMenu(); appIsReady = false; auth.signOut().then(()=>showLogin()); }
+// Handle redirect result (fallback if popup was blocked)
+auth.getRedirectResult()
+  .then(result => { if (result && result.user) showApp(result.user); })
+  .catch(() => {});
+
+function doLogout() {
+  closeMenu();
+  appIsReady = false;  // reset BEFORE signOut so onAuthStateChanged shows login
+  uid = null;
+  auth.signOut().then(() => { showLogin(); });
+}
 
 /* ══════════════════════════════
    FIRESTORE SYNC
@@ -859,6 +910,7 @@ function renderPartyDetail(pid) {
     <div class="pacts">
       <button class="pact green" onclick="openPayFor('${pid}')">💵 Payment</button>
       <button class="pact blue"  onclick="openChallanFor('${pid}')">+ Challan</button>
+      <button class="pact blue"  onclick="openEditParty('${pid}')" style="background:#F0FFF4;color:#059669">✏️ Edit</button>
       <button class="pact purple" onclick="printStmt('${pid}')">🖨 Statement</button>
       <button class="pact red"   onclick="delParty('${pid}')">🗑 Delete</button>
     </div>
@@ -910,7 +962,7 @@ function challanCard(c, showParty) {
   const ptags= setts.map(s=>`<span class="ptag">+${fmt(s.amount)} on ${fmtD(s.date)}</span>`).join('');
   const bmap = {P:'P',T:'T',S:'S'};
   return `<div class="ccard">
-    <div class="chead" onclick="toggleCard('${c.id}')">
+    <div class="chead" onclick="toggleCard(this)">
       <div class="cleft">
         <span class="cnum">${esc(c.num)}</span>
         <div class="cinfo">${showParty&&party?`<div class="cp">${esc(party.name)}</div>`:''}
@@ -920,7 +972,9 @@ function challanCard(c, showParty) {
     </div>
     <div class="cbody" id="cb-${c.id}">
       <table class="itable"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th style="text-align:right">Amount</th></tr></thead>
-      <tbody>${c.items.map(it=>`<tr><td>${esc(it.name)}</td><td>${it.qty}</td><td>${fmt(it.rate)}</td><td style="text-align:right;font-weight:700">${fmt(it.amount)}</td></tr>`).join('')}</tbody></table>
+      <tbody>${c.items.map(it=>`<tr><td>${esc(it.name)}</td><td>${it.qty}</td><td>${fmt(it.rate)}</td><td style="text-align:right;font-weight:700">${fmt(it.amount)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr style="background:#F0F4FF;font-weight:700;font-size:12px"><td style="padding:6px 8px;border-top:1.5px solid #BFDBFE;color:#555">Total</td><td style="padding:6px 8px;border-top:1.5px solid #BFDBFE;color:#1A2E5A">${c.items.reduce((s,i)=>s+i.qty,0)} pcs</td><td style="padding:6px 8px;border-top:1.5px solid #BFDBFE"></td><td style="padding:6px 8px;border-top:1.5px solid #BFDBFE;text-align:right;color:#1A2E5A;font-size:13px">${fmt(c.total)}</td></tr></tfoot>
+      </table>
       <div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:3px"><span>Paid: ${fmt(paid)} (${pct}%)</span><span>Due: ${fmt(due)}</span></div>
       <div class="pbar"><div class="pbar-fill" style="width:${pct}%"></div></div>
       ${ptags?`<div style="margin-top:6px">${ptags}</div>`:''}
@@ -937,7 +991,10 @@ function challanCard(c, showParty) {
     </div>
   </div>`;
 }
-function toggleCard(cid) { const el=document.getElementById('cb-'+cid); if(el) el.classList.toggle('open'); }
+function toggleCard(el) {
+  const body = el.closest('.ccard').querySelector('.cbody');
+  if (body) body.classList.toggle('open');
+}
 
 /* ══════════════════════════════
    MODALS
@@ -1663,8 +1720,48 @@ async function confirmImport() {
 }
 
 /* ══════════════════════════════
-   EDIT CHALLAN
+   EDIT PARTY
 ══════════════════════════════ */
+let curEditPartyId = null;
+
+function openEditParty(pid) {
+  const p = S.parties.find(x=>x.id===pid); if(!p) return;
+  curEditPartyId = pid;
+  document.getElementById('ep-name').value  = p.name  || '';
+  document.getElementById('ep-phone').value = p.phone || '';
+  document.getElementById('ep-city').value  = p.city  || '';
+  document.getElementById('ep-ob').value    = p.ob    || 0;
+  document.getElementById('ep-subtitle').textContent = p.name;
+  document.getElementById('mo-edit-party').classList.add('open');
+}
+
+function saveEditParty() {
+  const pid = curEditPartyId; if(!pid) return;
+  const p   = S.parties.find(x=>x.id===pid); if(!p) return;
+  const newName = document.getElementById('ep-name').value.trim();
+  if (!newName) { alert('Party name is required'); return; }
+
+  // Check duplicate name (excluding current party)
+  const duplicate = S.parties.find(x=>x.id!==pid && x.name.toLowerCase()===newName.toLowerCase());
+  if (duplicate) { alert('Another party with this name already exists'); return; }
+
+  const oldName = p.name;
+  p.name  = newName;
+  p.phone = document.getElementById('ep-phone').value.trim();
+  p.city  = document.getElementById('ep-city').value.trim();
+  p.ob    = +document.getElementById('ep-ob').value || 0;
+
+  // Update pname in all challans for this party
+  if (oldName !== newName) {
+    S.challans.forEach(c => { if (c.pid === pid) c.pname = newName; });
+  }
+
+  saveToCloud();
+  closeModal('edit-party');
+  renderAll();
+  renderPartyDetail(pid);
+  document.getElementById('topbar-title').textContent = newName;
+}
 let curEditChallanIdEC = null;
 let ecRowId = 0;
 
@@ -2041,8 +2138,13 @@ function printStmt(pid) {
   const chR=chs.map((c,i)=>{const paid=challanPaid(c.id),due=c.total-paid;return`<tr style="background:${i%2?'#F9F9F9':'#fff'}"><td style="padding:7px 9px;border:1px solid #E0E0E0">${esc(c.num)}</td><td style="padding:7px 9px;border:1px solid #E0E0E0">${fmtD(c.date)}</td><td style="padding:7px 9px;border:1px solid #E0E0E0">${c.items.map(it=>esc(it.name)+' ('+it.qty+')').join(', ')}</td><td style="padding:7px 9px;border:1px solid #E0E0E0;text-align:right;font-weight:700">${fmt(c.total)}</td><td style="padding:7px 9px;border:1px solid #E0E0E0;text-align:right;color:#059669;font-weight:700">${fmt(paid)}</td><td style="padding:7px 9px;border:1px solid #E0E0E0;text-align:right;color:${due>0?'#DC2626':'#059669'};font-weight:700">${fmt(due)}</td><td style="padding:7px 9px;border:1px solid #E0E0E0;text-align:center"><span style="background:${sbMap[c.status]};color:${scMap[c.status]};padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700">${slMap[c.status]}</span></td></tr>`;}).join('');
   const pR=pmts.map((p,i)=>`<tr style="background:${i%2?'#F9F9F9':'#fff'}"><td style="padding:7px 9px;border:1px solid #E0E0E0">${fmtD(p.date)}</td><td style="padding:7px 9px;border:1px solid #E0E0E0;font-weight:700;color:#059669">${fmt(p.amount)}</td><td style="padding:7px 9px;border:1px solid #E0E0E0">${esc(p.mode)}</td><td style="padding:7px 9px;border:1px solid #E0E0E0;color:#666">${esc(p.remarks||'-')}</td></tr>`).join('');
   const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Statement - ${esc(party.name)}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:13px;color:#1A1A1A}@media print{.np{display:none!important}@page{margin:12mm;size:A4}}.pg{max-width:760px;margin:0 auto;padding:24px}.pb{background:#f0f0f0;padding:10px 16px;display:flex;gap:10px;align-items:center;margin:-24px -24px 24px}.pb button{padding:8px 20px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-family:Arial;font-weight:600}.top{display:flex;justify-content:space-between;border-bottom:3px solid #1A2E5A;padding-bottom:14px;margin-bottom:16px}.co{font-size:19px;font-weight:700;color:#1A2E5A}.cs{font-size:11px;color:#888;margin-top:2px}.meta{display:grid;grid-template-columns:1fr 1fr;border:1px solid #E0E0E0;border-radius:6px;overflow:hidden;margin-bottom:14px}.ml{padding:7px 12px;background:#F5F7FA;color:#555;font-weight:600;font-size:12px;border-bottom:1px solid #E8E8E8;border-right:1px solid #E8E8E8}.mv{padding:7px 12px;font-weight:700;border-bottom:1px solid #E8E8E8}.sec{font-weight:700;font-size:12px;color:#1A2E5A;margin:14px 0 7px;text-transform:uppercase;border-bottom:2px solid #1A2E5A;padding-bottom:3px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1A2E5A;color:#fff;padding:8px 9px;text-align:left;font-size:11px}.db{border:2px solid #1A2E5A;border-radius:8px;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;margin:14px 0;background:#EFF6FF}.sig{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px;padding-top:16px;border-top:1px dashed #CCC}.sl{border-top:1.5px solid #1A1A1A;margin-top:36px;padding-top:5px;font-size:11px;font-weight:600;color:#555;text-align:center}.ft{text-align:center;font-size:10px;color:#AAA;padding:8px 0 0;border-top:1px solid #F0F0F0;margin-top:8px}</style></head><body><div class="pg">
-<div class="pb np"><button onclick="window.print()" style="background:#1A2E5A;color:#fff">🖨 Print</button><button onclick="window.close()" style="background:#fff;border:1px solid #CCC">✕ Close</button></div>
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Statement - ${esc(party.name)}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:13px;color:#1A1A1A}@media print{.np{display:none!important}@page{margin:12mm;size:A4}}.pg{max-width:760px;margin:0 auto;padding:24px}.pb{background:#f0f0f0;padding:10px 16px;display:flex;gap:10px;align-items:center;margin:-24px -24px 24px;flex-wrap:wrap}.pb button{padding:8px 20px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-family:Arial;font-weight:600}.top{display:flex;justify-content:space-between;border-bottom:3px solid #1A2E5A;padding-bottom:14px;margin-bottom:16px}.co{font-size:19px;font-weight:700;color:#1A2E5A}.cs{font-size:11px;color:#888;margin-top:2px}.meta{display:grid;grid-template-columns:1fr 1fr;border:1px solid #E0E0E0;border-radius:6px;overflow:hidden;margin-bottom:14px}.ml{padding:7px 12px;background:#F5F7FA;color:#555;font-weight:600;font-size:12px;border-bottom:1px solid #E8E8E8;border-right:1px solid #E8E8E8}.mv{padding:7px 12px;font-weight:700;border-bottom:1px solid #E8E8E8}.sec{font-weight:700;font-size:12px;color:#1A2E5A;margin:14px 0 7px;text-transform:uppercase;border-bottom:2px solid #1A2E5A;padding-bottom:3px}table{width:100%;border-collapse:collapse;font-size:12px}th{background:#1A2E5A;color:#fff;padding:8px 9px;text-align:left;font-size:11px}.db{border:2px solid #1A2E5A;border-radius:8px;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;margin:14px 0;background:#EFF6FF}.sig{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px;padding-top:16px;border-top:1px dashed #CCC}.sl{border-top:1.5px solid #1A1A1A;margin-top:36px;padding-top:5px;font-size:11px;font-weight:600;color:#555;text-align:center}.ft{text-align:center;font-size:10px;color:#AAA;padding:8px 0 0;border-top:1px solid #F0F0F0;margin-top:8px}</style></head><body><div class="pg">
+<div class="pb np">
+  <button onclick="window.print()" style="background:#1A2E5A;color:#fff">🖨 Print</button>
+  <button onclick="shareWA()" style="background:#25D366;color:#fff">📲 Share on WhatsApp</button>
+  <button onclick="shareNative()" style="background:#6D28D9;color:#fff">📤 Share</button>
+  <button onclick="window.close()" style="background:#fff;border:1px solid #CCC">✕ Close</button>
+</div>
 <div class="top"><div><div class="co">🧵 Modrobe Impex</div><div class="cs">Wholesale Readymade Garments · New Delhi</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:700;color:#1A2E5A">ACCOUNT STATEMENT</div><div style="font-size:17px;font-weight:700;margin-top:3px">${esc(party.name)}</div><div style="font-size:11px;color:#888;margin-top:3px">As on ${fmtD(today())}</div></div></div>
 <div class="meta"><div class="ml">Party</div><div class="mv" style="color:#1A2E5A">${esc(party.name)}</div><div class="ml">Phone</div><div class="mv">${esc(party.phone||'-')}</div><div class="ml">City</div><div class="mv">${esc(party.city||'-')}</div><div class="ml">Total Challans</div><div class="mv">${chs.length}</div></div>
 <div class="sec">Challan Details</div>
@@ -2052,7 +2154,38 @@ function printStmt(pid) {
 <div class="db"><div style="font-size:13px;font-weight:600;color:#1A2E5A">NET OUTSTANDING</div><div style="font-size:22px;font-weight:700;color:${bal>0?'#DC2626':'#059669'}">${fmt(Math.abs(bal))} ${bal<=0?'(CLEAR)':''}</div></div>
 <div class="sig"><div><div class="sl">Party Signature<br><strong>${esc(party.name)}</strong></div></div><div><div class="sl">Authorised Signatory<br><strong>Modrobe Impex</strong></div></div></div>
 <div class="ft">Generated: ${new Date().toLocaleString('en-IN')} · ${esc(party.name)}</div>
-</div></body></html>`);
+</div>
+<script>
+function buildText(){
+  const lines=[
+    'Account Statement - Modrobe Impex',
+    'Party: ${esc(party.name)}',
+    'Phone: ${esc(party.phone||'-')}',
+    'Date: '+new Date().toLocaleDateString('en-IN'),
+    '',
+    'CHALLANS (${chs.length}):',
+    ${JSON.stringify(chs.map(c=>{ const paid=c.total-0; return c.num+' | '+c.date+' | Rs.'+c.total; }).join('\n'))},
+    '',
+    'PAYMENTS:',
+    ${JSON.stringify(pmts.map(p=>p.date+' | Rs.'+p.amount+' | '+p.mode).join('\n'))},
+    '',
+    'NET OUTSTANDING: Rs.${Math.abs(bal)} ${bal<=0?'(CLEAR)':''}',
+    '',
+    'Modrobe Impex - Wholesale Readymade Garments'
+  ];
+  return lines.join('\n');
+}
+function shareWA(){
+  const text=encodeURIComponent('*Account Statement - Modrobe Impex*\n*Party: ${esc(party.name)}*\n${party.phone?'📞 '+party.phone+'\\n':''}Date: '+new Date().toLocaleDateString('en-IN')+'\n\n*Challans: ${chs.length}*\nTotal Billed: Rs.${chs.reduce((s,c)=>s+c.total,0).toLocaleString('en-IN')}\nTotal Paid: Rs.${pmts.reduce((s,p)=>s+p.amount,0).toLocaleString('en-IN')}\n*Outstanding: Rs.${Math.abs(bal).toLocaleString('en-IN')}${bal<=0?' (CLEAR)':''}*\n\n_Modrobe Impex - New Delhi_');
+  window.open('https://wa.me/?text='+text,'_blank');
+}
+function shareNative(){
+  const text='Account Statement\\nParty: ${esc(party.name)}\\nDate: '+new Date().toLocaleDateString('en-IN')+'\\n\\nTotal Billed: Rs.${chs.reduce((s,c)=>s+c.total,0).toLocaleString('en-IN')}\\nTotal Paid: Rs.${pmts.reduce((s,p)=>s+p.amount,0).toLocaleString('en-IN')}\\nOutstanding: Rs.${Math.abs(bal).toLocaleString('en-IN')}${bal<=0?' (CLEAR)':''}\\n\\nModrobe Impex';
+  if(navigator.share){navigator.share({title:'Statement - ${esc(party.name)}',text:text}).catch(()=>{});}
+  else{navigator.clipboard.writeText(text).then(()=>alert('Statement summary copied to clipboard!'));}
+}
+<\/script>
+</body></html>`);
   w.document.close();
 }
 </script>
